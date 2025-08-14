@@ -1,0 +1,14 @@
+{
+  "name": "test-automation-platform",
+  "version": "1.0.0",
+  "description": "Automated exploratory testing platform using React and Flask with Gemini AI",
+  "scripts": {
+    "start-backend": "cd backend && python app.py",
+    "start-frontend": "cd frontend && npm start",
+    "install-deps": "pip install -r backend/requirements.txt && cd frontend && npm install --legacy-peer-deps",
+    "setup": "python -m venv .venv && .venv/Scripts/activate && pip install -r backend/requirements.txt && cd frontend && npm install --legacy-peer-deps"
+  },
+  "keywords": ["testing", "automation", "react", "flask", "gemini", "ai"],
+  "author": "Test Automation Team",
+  "license": "MIT"
+}
