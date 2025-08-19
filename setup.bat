@@ -47,9 +47,9 @@ echo ====================================
 echo  Setup Complete!
 echo ====================================
 echo.
-echo IMPORTANT: Before running the application:
-echo 1. Get your Gemini API key from: https://makersuite.google.com/app/apikey
-echo 2. Edit backend\.env file and add your API key
+echo IMPORTANT: Perplexity API key has been configured:
+echo API Key: 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
+echo Model: sonar-pro
 echo.
 echo To start the application:
 echo 1. Run: npm run start-backend (in one terminal)

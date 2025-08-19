@@ -19,7 +19,13 @@ import {
   LinearProgress,
   Card,
   CardContent,
-  Divider
+  Divider,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow
 } from '@mui/material';
 import {
   ExpandMore,
@@ -33,7 +39,9 @@ import {
   Accessibility,
   Speed,
   BugReport,
-  Download
+  Download,
+  Cancel,
+  ErrorOutline
 } from '@mui/icons-material';
 import axios from 'axios';
 import JSONPretty from 'react-json-pretty';
@@ -99,6 +107,71 @@ const TestResults = () => {
       default:
         return 'success';
     }
+  };
+
+  const getStatusIcon = (status) => {
+    switch (status?.toLowerCase()) {
+      case 'pass':
+      case 'passed':
+        return <CheckCircle color="success" />;
+      case 'fail':
+      case 'failed':
+        return <Cancel color="error" />;
+      case 'warning':
+        return <Warning color="warning" />;
+      default:
+        return <ErrorOutline color="action" />;
+    }
+  };
+
+  const getStatusColor = (status) => {
+    switch (status?.toLowerCase()) {
+      case 'pass':
+      case 'passed':
+        return 'success';
+      case 'fail':
+      case 'failed':
+        return 'error';
+      case 'warning':
+        return 'warning';
+      default:
+        return 'default';
+    }
+  };
+
+  const deriveStatus = (scenario) => {
+    // If status is already provided, use it
+    if (scenario.status) {
+      return scenario.status;
+    }
+    
+    // Derive status from comparing expected vs observed results
+    const expected = (scenario.expected_result || scenario.expected || '').toLowerCase().trim();
+    const observed = (scenario.observed_result || scenario.observed || '').toLowerCase().trim();
+    
+    if (!expected || !observed) {
+      return 'unknown';
+    }
+    
+    // Simple comparison - you can make this more sophisticated
+    if (expected === observed) {
+      return 'pass';
+    }
+    
+    // Check if observed contains indicators of failure
+    if (observed.includes('error') || observed.includes('fail') || observed.includes('not working') || 
+        observed.includes('broken') || observed.includes('doesn\'t') || observed.includes('unable') ||
+        observed.includes('overlaps') || observed.includes('misaligned') || observed.includes('incorrect')) {
+      return 'fail';
+    }
+    
+    // Check if observed contains indicators of partial success
+    if (observed.includes('partially') || observed.includes('some issues') || observed.includes('minor')) {
+      return 'warning';
+    }
+    
+    // If expected and observed are different but no clear failure indicators
+    return 'fail';
   };
 
   const downloadReport = () => {
@@ -259,35 +332,65 @@ const TestResults = () => {
               </Typography>
             </AccordionSummary>
             <AccordionDetails>
-              {report.scenarios?.map((scenario, index) => (
-                <Card key={index} sx={{ mb: 2 }}>
-                  <CardContent>
-                    <Typography variant="h6" gutterBottom>
-                      {scenario.title}
-                    </Typography>
-                    <Typography variant="body2" color="text.secondary" paragraph>
-                      <strong>Steps:</strong> {Array.isArray(scenario.steps) ? scenario.steps.join(', ') : scenario.steps}
-                    </Typography>
-                    <Grid container spacing={2}>
-                      <Grid item xs={12} md={6}>
-                        <Typography variant="body2">
-                          <strong>Expected:</strong> {scenario.expected_result}
-                        </Typography>
-                      </Grid>
-                      <Grid item xs={12} md={6}>
-                        <Typography variant="body2">
-                          <strong>Observed:</strong> {scenario.observed_result}
-                        </Typography>
-                      </Grid>
-                    </Grid>
-                    {scenario.input_data && (
-                      <Typography variant="body2" sx={{ mt: 1 }}>
-                        <strong>Input Data:</strong> {JSON.stringify(scenario.input_data)}
-                      </Typography>
-                    )}
-                  </CardContent>
-                </Card>
-              )) || (
+              {report.scenarios && report.scenarios.length > 0 ? (
+                <TableContainer component={Paper} variant="outlined">
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell><strong>Test ID</strong></TableCell>
+                        <TableCell><strong>Test Case</strong></TableCell>
+                        <TableCell><strong>Type</strong></TableCell>
+                        <TableCell><strong>Platform</strong></TableCell>
+                        <TableCell><strong>Browser</strong></TableCell>
+                        <TableCell><strong>Expected</strong></TableCell>
+                        <TableCell><strong>Observed</strong></TableCell>
+                        <TableCell><strong>Status</strong></TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {report.scenarios.map((scenario, index) => (
+                        <TableRow key={index} hover>
+                          <TableCell>{scenario.test_id || `T${String(index + 1).padStart(3, '0')}`}</TableCell>
+                          <TableCell>
+                            <Typography variant="body2" sx={{ fontWeight: 'medium' }}>
+                              {scenario.title || scenario.test_case || 'N/A'}
+                            </Typography>
+                            {scenario.steps && (
+                              <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                                Steps: {Array.isArray(scenario.steps) ? scenario.steps.join(', ') : scenario.steps}
+                              </Typography>
+                            )}
+                          </TableCell>
+                          <TableCell>{scenario.type || scenario.category || 'Functional'}</TableCell>
+                          <TableCell>{scenario.platform || 'Web'}</TableCell>
+                          <TableCell>{scenario.browser || 'Chrome'}</TableCell>
+                          <TableCell>
+                            <Typography variant="body2" sx={{ maxWidth: 200, wordBreak: 'break-word' }}>
+                              {scenario.expected_result || scenario.expected || 'N/A'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2" sx={{ maxWidth: 200, wordBreak: 'break-word' }}>
+                              {scenario.observed_result || scenario.observed || 'N/A'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                              {getStatusIcon(deriveStatus(scenario))}
+                              <Chip 
+                                label={deriveStatus(scenario)} 
+                                size="small"
+                                color={getStatusColor(deriveStatus(scenario))}
+                                variant="outlined"
+                              />
+                            </Box>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              ) : (
                 <Typography color="text.secondary">No scenarios available</Typography>
               )}
             </AccordionDetails>

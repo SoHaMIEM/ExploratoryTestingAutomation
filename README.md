@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-The **Automated Exploratory Testing Platform** is a comprehensive web application that leverages AI-powered testing to perform thorough analysis of Single Page Applications (SPAs). Built with React frontend and Flask backend, it integrates Google's Gemini Flash 2.0 AI model to provide expert-level testing capabilities equivalent to a 15+ year experienced software tester.
+The **Automated Exploratory Testing Platform** is a comprehensive web application that leverages AI-powered testing to perform thorough analysis of Single Page Applications (SPAs). Built with React frontend and Flask backend, it integrates Perplexity's Sonar Pro AI model to provide expert-level testing capabilities equivalent to a 15+ year experienced software tester.
 
 ---
 
@@ -20,7 +20,7 @@ The **Automated Exploratory Testing Platform** is a comprehensive web applicatio
 
 #### Backend Stack
 - **Flask 3.0.0**: Python web framework for RESTful API
-- **Google Generative AI 0.8.3**: Gemini Flash 2.0 integration
+- **OpenAI SDK 1.0.0**: Perplexity Sonar Pro integration
 - **Flask-CORS 4.0.0**: Cross-Origin Resource Sharing support
 - **Python-dotenv 1.0.0**: Environment variable management
 - **Gunicorn 21.2.0**: Production WSGI server
@@ -40,7 +40,7 @@ The **Automated Exploratory Testing Platform** is a comprehensive web applicatio
                                                       │
                                                       ▼
                                             ┌─────────────────────┐
-                                            │  Gemini Flash 2.0   │
+                                            │  Perplexity Sonar   │
                                             │    AI Engine       │
                                             └─────────────────────┘
 ```
