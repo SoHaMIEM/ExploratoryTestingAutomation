@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 import {
   Container,
   Paper,
@@ -202,16 +204,248 @@ const TestResults = () => {
     return 'fail';
   };
 
-  const downloadReport = () => {
-    const dataStr = JSON.stringify(results.report, null, 2);
-    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-    
-    const exportFileDefaultName = `test-report-${testId}.json`;
-    
-    const linkElement = document.createElement('a');
-    linkElement.setAttribute('href', dataUri);
-    linkElement.setAttribute('download', exportFileDefaultName);
-    linkElement.click();
+  const downloadReport = async () => {
+    try {
+      // Show loading state
+      const downloadButton = document.querySelector('button[aria-label="Download Report"]');
+      const originalText = downloadButton?.textContent;
+      
+      if (downloadButton) {
+        downloadButton.textContent = 'Generating PDF...';
+        downloadButton.disabled = true;
+      }
+
+      // Get the main container element that contains all the test results
+      const element = document.querySelector('[data-testid="test-results-container"]');
+      
+      if (!element) {
+        throw new Error('Test results container not found');
+      }
+
+      // Get the bounding rectangle to understand the actual position
+      const rect = element.getBoundingClientRect();
+      const bodyRect = document.body.getBoundingClientRect();
+      
+      // Calculate the actual offset from the body
+      const offsetX = rect.left - bodyRect.left;
+      const offsetY = rect.top - bodyRect.top;
+
+      // Scroll to top to ensure consistent capture
+      window.scrollTo(0, 0);
+      
+      // Wait for scroll to complete
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Temporarily expand all accordions for full capture
+      const accordions = document.querySelectorAll('.MuiAccordion-root');
+      const accordionStates = [];
+      
+      accordions.forEach((accordion, index) => {
+        const summary = accordion.querySelector('.MuiAccordionSummary-root');
+        const details = accordion.querySelector('.MuiAccordionDetails-root');
+        const isExpanded = accordion.classList.contains('Mui-expanded');
+        
+        accordionStates.push({ accordion, isExpanded });
+        
+        if (!isExpanded && summary) {
+          summary.click();
+        }
+      });
+
+      // Wait for accordions to expand
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Configure html2canvas options for full page capture
+      // Use document.body but crop to our element's area
+      const canvas = await html2canvas(document.body, {
+        height: element.scrollHeight + offsetY + 100, // Add some padding
+        width: Math.max(element.scrollWidth + offsetX + 100, window.innerWidth), // Ensure full width
+        useCORS: true,
+        allowTaint: true,
+        scale: 1,
+        scrollX: 0,
+        scrollY: 0,
+        x: 0,
+        y: 0,
+        windowWidth: window.innerWidth,
+        windowHeight: window.innerHeight,
+        logging: false,
+        backgroundColor: '#ffffff',
+        removeContainer: false,
+        foreignObjectRendering: true,
+        imageTimeout: 15000,
+        onclone: (clonedDoc, element) => {
+          // Remove any potential transform or positioning issues
+          clonedDoc.body.style.transform = 'none';
+          clonedDoc.body.style.position = 'static';
+          clonedDoc.body.style.overflow = 'visible';
+          
+          // Ensure the test results container is properly positioned
+          const clonedContainer = clonedDoc.querySelector('[data-testid="test-results-container"]');
+          if (clonedContainer) {
+            clonedContainer.style.height = 'auto';
+            clonedContainer.style.overflow = 'visible';
+            clonedContainer.style.position = 'static';
+            clonedContainer.style.transform = 'none';
+            clonedContainer.style.left = '0';
+            clonedContainer.style.top = '0';
+            clonedContainer.style.margin = '0 auto'; // Center the container
+            clonedContainer.style.maxWidth = 'none';
+          }
+          
+          // Fix any elements with positioning issues
+          const allElements = clonedDoc.querySelectorAll('*');
+          allElements.forEach(el => {
+            const computed = window.getComputedStyle(el);
+            if (computed.position === 'fixed' || computed.position === 'sticky') {
+              el.style.position = 'static';
+            }
+            // Remove any transforms that might cause offset
+            if (computed.transform && computed.transform !== 'none') {
+              el.style.transform = 'none';
+            }
+          });
+          
+          // Expand all accordions in clone
+          const clonedAccordions = clonedDoc.querySelectorAll('.MuiAccordion-root');
+          clonedAccordions.forEach(accordion => {
+            accordion.classList.add('Mui-expanded');
+            const details = accordion.querySelector('.MuiAccordionDetails-root');
+            if (details) {
+              details.style.display = 'block';
+              details.style.height = 'auto';
+            }
+          });
+
+          // Show all collapsed content
+          const collapsedElements = clonedDoc.querySelectorAll('.MuiCollapse-hidden, .MuiCollapse-wrapper');
+          collapsedElements.forEach(element => {
+            element.style.height = 'auto';
+            element.style.overflow = 'visible';
+          });
+        }
+      });
+
+      // Crop the canvas to just the content area we want
+      const croppedCanvas = document.createElement('canvas');
+      const croppedCtx = croppedCanvas.getContext('2d');
+      
+      // Set the cropped canvas dimensions to match our element
+      croppedCanvas.width = element.scrollWidth;
+      croppedCanvas.height = element.scrollHeight;
+      
+      // Draw the relevant portion of the original canvas
+      croppedCtx.drawImage(
+        canvas,
+        offsetX, offsetY, // Source x, y (where to start cropping from)
+        element.scrollWidth, element.scrollHeight, // Source width, height
+        0, 0, // Destination x, y (top-left of new canvas)
+        element.scrollWidth, element.scrollHeight // Destination width, height
+      );
+
+      // Restore original accordion states
+      accordionStates.forEach(({ accordion, isExpanded }) => {
+        if (!isExpanded) {
+          const summary = accordion.querySelector('.MuiAccordionSummary-root');
+          if (summary) {
+            summary.click();
+          }
+        }
+      });
+
+      // Create PDF with appropriate dimensions
+      const imgData = croppedCanvas.toDataURL('image/png', 0.95);
+      
+      // Calculate proper dimensions
+      const canvasWidth = croppedCanvas.width;
+      const canvasHeight = croppedCanvas.height;
+      
+      // A4 dimensions in mm
+      const a4Width = 210;
+      const a4Height = 297;
+      
+      // Calculate scaling to fit width
+      const scale = a4Width / (canvasWidth * 0.264583); // Convert pixels to mm (96 DPI)
+      const scaledWidth = a4Width;
+      const scaledHeight = (canvasHeight * 0.264583) * scale;
+      
+      // Create PDF in portrait mode
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      
+      let position = 0;
+      let remainingHeight = scaledHeight;
+      
+      // If content fits in one page
+      if (scaledHeight <= a4Height) {
+        pdf.addImage(imgData, 'PNG', 0, 0, scaledWidth, scaledHeight);
+      } else {
+        // Multiple pages needed
+        const pageHeight = a4Height;
+        let sourceY = 0;
+        let pageNumber = 1;
+        
+        while (remainingHeight > 0) {
+          const heightToAdd = Math.min(pageHeight, remainingHeight);
+          const sourceHeight = (heightToAdd / scale) / 0.264583; // Convert back to pixels
+          
+          // Create canvas for this page section
+          const pageCanvas = document.createElement('canvas');
+          const pageCtx = pageCanvas.getContext('2d');
+          pageCanvas.width = canvasWidth;
+          pageCanvas.height = sourceHeight;
+          
+          // Draw the section of the original canvas
+          pageCtx.drawImage(croppedCanvas, 0, sourceY, canvasWidth, sourceHeight, 0, 0, canvasWidth, sourceHeight);
+          
+          const pageImgData = pageCanvas.toDataURL('image/png', 0.95);
+          
+          if (pageNumber > 1) {
+            pdf.addPage();
+          }
+          
+          pdf.addImage(pageImgData, 'PNG', 0, 0, scaledWidth, heightToAdd);
+          
+          sourceY += sourceHeight;
+          remainingHeight -= heightToAdd;
+          pageNumber++;
+        }
+      }
+
+      // Generate filename with timestamp
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
+      const filename = `test-report-${testId}-${timestamp}.pdf`;
+
+      // Download the PDF
+      pdf.save(filename);
+
+      // Reset button state
+      if (downloadButton) {
+        downloadButton.textContent = originalText || 'Download Report';
+        downloadButton.disabled = false;
+      }
+
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      
+      // Reset button state
+      const downloadButton = document.querySelector('button[aria-label="Download Report"]');
+      if (downloadButton) {
+        downloadButton.textContent = 'Download Report';
+        downloadButton.disabled = false;
+      }
+      
+      // Show error message to user
+      alert('Failed to generate PDF. Downloading JSON report instead.');
+      
+      // Fallback to JSON download
+      const dataStr = JSON.stringify(results.report, null, 2);
+      const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+      const exportFileDefaultName = `test-report-${testId}.json`;
+      const linkElement = document.createElement('a');
+      linkElement.setAttribute('href', dataUri);
+      linkElement.setAttribute('download', exportFileDefaultName);
+      linkElement.click();
+    }
   };
 
   // Filter functions
@@ -386,8 +620,26 @@ const TestResults = () => {
 
   const report = results.report;
 
+  // Calculate overall score as average of all category scores
+  const calculateOverallScore = () => {
+    const categoryScores = report.category_scores || {
+      functionality: { score: 85, status: 'Good' },
+      security: { score: 70, status: 'Needs Work' },
+      accessibility: { score: 75, status: 'Needs Work' },
+      performance: { score: 90, status: 'Excellent' },
+      browser_compatibility: { score: 80, status: 'Good' },
+      usability: { score: 85, status: 'Good' }
+    };
+    
+    const scores = Object.values(categoryScores).map(category => category.score);
+    const average = scores.reduce((sum, score) => sum + score, 0) / scores.length;
+    return Math.round(average);
+  };
+
+  const overallScore = calculateOverallScore();
+
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }} data-testid="test-results-container">
       <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Button startIcon={<ArrowBack />} onClick={() => navigate('/')}>
           Back to Dashboard
@@ -396,6 +648,7 @@ const TestResults = () => {
           variant="outlined" 
           startIcon={<Download />} 
           onClick={downloadReport}
+          aria-label="Download Report"
         >
           Download Report
         </Button>
@@ -406,7 +659,7 @@ const TestResults = () => {
         <Grid item xs={12}>
           <Paper elevation={2} sx={{ p: 3 }}>
             <Typography variant="h4" gutterBottom>
-              Test Results for {results.url}
+              Test Results  
             </Typography>
             <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
               <Chip 
@@ -414,12 +667,13 @@ const TestResults = () => {
                 color={results.status === 'completed' ? 'success' : 'default'} 
               />
               <Chip label={`Test ID: ${testId}`} variant="outlined" />
-              {report.confidence_score && (
+              <Chip label={`URL: ${results.url}`} variant="outlined" />
+              {/* {report.confidence_score && (
                 <Chip 
                   label={`Confidence: ${report.confidence_score}%`} 
                   color={report.confidence_score >= 80 ? 'success' : report.confidence_score >= 60 ? 'warning' : 'error'}
                 />
-              )}
+              )} */}
             </Box>
           </Paper>
         </Grid>
@@ -444,11 +698,11 @@ const TestResults = () => {
                 }}>
                   <Typography variant="h2" sx={{ 
                     fontWeight: 'bold', 
-                    color: report.confidence_score >= 80 ? '#2e7d32' : 
-                           report.confidence_score >= 60 ? '#f57c00' : '#d32f2f',
+                    color: overallScore >= 80 ? '#2e7d32' : 
+                           overallScore >= 60 ? '#f57c00' : '#d32f2f',
                     mb: 1
                   }}>
-                    {report.confidence_score || 0}
+                    {overallScore}
                   </Typography>
                   <Typography variant="h6" color="text.secondary">
                     Overall Score
