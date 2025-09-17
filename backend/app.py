@@ -2,6 +2,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 from openai import OpenAI
 import os
+import sys
 import uuid
 import time
 import threading
@@ -33,27 +34,34 @@ class TestingEngine:
     def __init__(self):
         self.test_scenarios = []
         
-   # In your backend/app.py file
-
-    # In your backend/app.py file
-# In your backend/app.py file
-
-    # In your backend/app.py file
 
     def generate_test_prompt(self, url, test_type, browsers, platforms, test_categories):
         """
         Generate a definitive, integrated prompt that generates and simulates test cases
         in a single workflow to ensure defects are found.
         """
-        
+
+
         # Get selected categories and their display names
         selected_categories = [cat for cat, enabled in test_categories.items() if enabled]
+        selected_categories.sort()  # Ensure consistent ordering
         categories_text = ", ".join(selected_categories)
         browsers_text = ", ".join(browsers)
         platforms_text = ", ".join(platforms)
         
+        # Calculate minimum scenarios needed
+        num_categories = len(selected_categories)
+        min_scenarios_per_category = 8  # Minimum 8 scenarios per category
+        total_min_scenarios = max(num_categories * min_scenarios_per_category, 25)  # At least 25 total scenarios
+        
         prompt = f"""
     You are a Principal QA Architect with an obsessive eye for detail. Your mission is to produce a comprehensive test report for the page at `{url}`. You will do this by brainstorming every conceivable test case and **immediately simulating the outcome of each one** to find and report all defects.
+    
+    **CONSISTENCY REQUIREMENTS:**
+    - Generate test scenarios in a deterministic, reproducible manner
+    - Use alphabetical ordering for scenario IDs and consistent naming conventions
+    - Follow the exact JSON structure provided without deviation
+    - Ensure scenario numbering is sequential and consistent (SCENARIO-001, SCENARIO-002, etc.)
     
     **Target URL:** **{url}** (Analyze ONLY this page)
     **Test Type:** {test_type}
@@ -63,7 +71,15 @@ class TestingEngine:
     - **Target Platforms:** {platforms_text}  
     - **Test Categories to Focus On:** {categories_text}
     
-    **INSTRUCTIONS:** Tailor your testing approach to specifically address the selected categories, browsers, and platforms above. If specific categories are selected, prioritize those areas while ensuring comprehensive coverage.
+    **CRITICAL TEST VOLUME REQUIREMENTS:**
+    - **MINIMUM {min_scenarios_per_category} test scenarios per category** (for categories: {categories_text})
+    - **TOTAL MINIMUM: {total_min_scenarios} test scenarios** in your final JSON response
+    - Each selected category MUST have at least {min_scenarios_per_category} comprehensive test scenarios
+    - **GENERATE SCENARIOS IN A CONSISTENT ORDER**: Process categories alphabetically: {', '.join(sorted(selected_categories))}
+    - If you have multiple categories selected, ensure each category gets equal attention
+    - Generate diverse test scenarios within each category (positive tests, negative tests, edge cases, boundary conditions)
+    
+    **INSTRUCTIONS:** Tailor your testing approach to specifically address the selected categories, browsers, and platforms above. You MUST generate comprehensive test coverage with the specified minimum number of scenarios per category.
     
     ---
     **## COGNITIVE WORKFLOW: INTEGRATED TEST & SIMULATION (MANDATORY) ##**
@@ -72,9 +88,16 @@ class TestingEngine:
     
     1.  **Component Inventory:** Begin by creating a mental inventory of every single interactive element on the page (all buttons, links, forms, menus, etc.).
     
-    2.  **Generate, Simulate, and Report (Continuous Loop):**
-        -   You will go through your component inventory one by one.
-        -   For each component, brainstorm a comprehensive list of test scenarios (Functional, UI, Usability, Accessibility, etc.).
+    2.  **Category-Based Test Generation:** For EACH selected category ({categories_text}), you MUST generate AT LEAST {min_scenarios_per_category} diverse test scenarios:
+        - **Functional Testing:** Test all interactive elements, forms, navigation, data processing, user flows
+        - **Security Testing:** Test input validation, authentication, authorization, data exposure, XSS, injection attacks
+        - **Accessibility Testing:** Test keyboard navigation, screen reader compatibility, color contrast, alt text, ARIA labels
+        - **Performance Testing:** Test page load speed, resource optimization, responsiveness, caching
+        - **Usability Testing:** Test user experience, navigation clarity, error handling, help text, workflow efficiency
+        - **UI/UX Testing:** Test visual design, layout consistency, responsive design, cross-browser appearance
+    
+    3.  **Generate, Simulate, and Report (Continuous Loop):**
+        -   For each category, systematically create multiple test scenarios covering different aspects
         -   **PRIORITIZE scenarios that match the selected test categories: {categories_text}**
         -   **Consider browser-specific issues for: {browsers_text}**
         -   **Consider platform-specific issues for: {platforms_text}**
@@ -89,7 +112,11 @@ class TestingEngine:
     ---
     **## OUTPUT REQUIREMENTS ##**
     
-    Produce a single JSON object. The `scenarios` array must contain your comprehensive list of test cases, each with an `observed_result`. The `defects_and_gaps` array must contain all failures discovered during your continuous simulation.
+    Produce a single JSON object. The `scenarios` array must contain your comprehensive list of test cases (MINIMUM {total_min_scenarios} scenarios), each with an `observed_result`. The `defects_and_gaps` array must contain all failures discovered during your continuous simulation.
+    
+    **MANDATORY SCENARIO DISTRIBUTION:**
+    Generate scenarios ensuring each selected category has at least {min_scenarios_per_category} test cases:
+    {chr(10).join([f"- {category.upper()}: Minimum {min_scenarios_per_category} scenarios" for category in selected_categories])}
     
     **JSON Structure Example:**
     {{
@@ -154,6 +181,24 @@ class TestingEngine:
             "affected_platforms": "iOS"
         }}
       ],
+      "non_functional_observations": {{
+        "performance": [
+          "Page load time analysis completed",
+          "Core Web Vitals metrics collected"
+        ],
+        "security": [
+          "Input validation checks performed",
+          "Authentication mechanisms reviewed"
+        ],
+        "accessibility": [
+          "Keyboard navigation assessment completed",
+          "Screen reader compatibility verified"
+        ],
+        "usability": [
+          "User interface intuitiveness evaluated",
+          "Error handling mechanisms reviewed"
+        ]
+      }},
       "recommendations": [
         "Fix article link routing immediately across all browsers: {browsers_text}.", 
         "Adjust footer CSS to fix text overlap specifically for Safari on iOS.",
@@ -174,6 +219,14 @@ class TestingEngine:
     **IMPORTANT:** 
     - Do not include a "confidence_score" field in your response - this will be calculated automatically based on your findings.
     - You MUST include realistic performance metrics in the "performance" section based on typical website performance for the given URL.
+    - You MUST include non-functional observations organized by category (performance, security, accessibility, usability) in the "non_functional_observations" section.
+    - You MUST include recommendations tailored to the selected browsers, platforms, and categories in the "recommendations" section.
+    
+    **NON-FUNCTIONAL OBSERVATIONS REQUIREMENTS:**
+    - Organize observations by category: performance, security, accessibility, usability
+    - Each category should contain 2-5 observations about the website's characteristics
+    - Focus on qualitative assessments and general observations rather than specific test results
+    - Examples: "Page uses modern CSS frameworks", "No obvious security headers detected", "Good color contrast throughout", "Intuitive navigation structure"
     
     **PERFORMANCE ANALYSIS REQUIREMENTS:**
     - Analyze the website's performance characteristics
@@ -192,60 +245,125 @@ class TestingEngine:
     6. **Include category in scenarios:** For each scenario, include a "category" field (e.g., "Functional", "Security", "Accessibility", "Performance", "Usability", "UI/UX")
     
     **FINAL INSTRUCTION:** Execute this integrated process precisely, always keeping the user's selected parameters in mind. Do not separate brainstorming from simulation. For every test case you think of, you must immediately determine its outcome and log a defect if it fails, considering the specific browsers, platforms, and categories selected by the user. Make sure to categorize each test scenario properly so the system can calculate category-specific scores.
+    
+    **SCENARIO GENERATION MANDATE:**
+    - YOU MUST GENERATE AT LEAST {total_min_scenarios} TOTAL TEST SCENARIOS
+    - EACH CATEGORY ({categories_text}) MUST HAVE AT LEAST {min_scenarios_per_category} SCENARIOS
+    - USE DIVERSE TESTING APPROACHES: Positive testing, negative testing, boundary testing, edge cases, error conditions
+    - ENSURE COMPREHENSIVE COVERAGE: Don't just test the obvious - test unusual user behaviors, error states, and edge conditions
+    - ENSURE TO TAKE SOME TIME FOR PAGE LOADING BEFORE REPORTING DEFECTS(MAX WAITING TIME - 30sec): Simulate real-world conditions with network delays and resource loading
+    - BE THOROUGH: Think like a critical user trying to break the application
+    
+    **DETERMINISTIC GENERATION RULES:**
+    - Always start with basic functionality tests, then progress to advanced scenarios
+    - Generate scenarios in category alphabetical order: {', '.join(sorted(selected_categories))}
+    - Use consistent naming patterns: "Test [Feature] [Action]" or "Verify [Expected Behavior]"
+    - Apply the same logic for determining pass/fail status for similar scenarios
+    - Use standardized severity levels: Critical, High, Medium, Low
     """
         return prompt
 
     def generate_browser_compatibility_prompt(self, url, browsers, platforms):
         """Generate prompt specifically for browser compatibility testing"""
-        browsers_text = ", ".join(browsers)
-        platforms_text = ", ".join(platforms)
+        
+         # Normalize inputs for consistency
+        normalized_url = url.lower().rstrip('/')
+        normalized_browsers = sorted([b.lower().strip() for b in browsers])
+        normalized_platforms = sorted([p.lower().strip() for p in platforms])
+        
+        browsers_text = ", ".join(normalized_browsers)
+        platforms_text = ", ".join(normalized_platforms)
+        
+        # Calculate minimum browser scenarios based on number of browsers and platforms
+        num_browsers = len(normalized_browsers)
+        num_platforms = len(normalized_platforms)
+        min_browser_scenarios = max(num_browsers * 3, 8)  # At least 3 scenarios per browser, minimum 8 total
         
         prompt = f"""
-You are a Browser Compatibility Testing Expert. Generate realistic browser compatibility test scenarios for: {url}
+You are a Browser Compatibility Testing Expert. Your task is to generate realistic browser compatibility test scenarios.
 
+**CRITICAL INSTRUCTIONS:**
+1. Return ONLY valid JSON - no markdown, no explanations, no additional text
+2. Ensure all JSON strings are properly escaped
+3. Keep field values concise to avoid truncation
+4. Generate exactly 5 test scenarios
+5. Each browser compatibility scenario MUST include id, title, test_case, steps, expected_result, observed_result, status, affected_browsers, affected_platforms and severity fields
+
+**Target URL:** {normalized_url}
 **Target Browsers:** {browsers_text}
 **Target Platforms:** {platforms_text}
 
-Create 5-8 realistic browser compatibility test scenarios. Focus on common compatibility issues.
-
-Return ONLY a valid JSON object with this exact structure:
+Generate browser compatibility test scenarios focusing on:
+- CSS rendering differences
+- JavaScript compatibility
+- HTML5 feature support
+- Responsive design behavior
+- Performance variations
 
 {{
   "browser_compatibility_scenarios": [
     {{
       "id": "BC-001",
-      "title": "CSS Flexbox Layout Test",
-      "test_case": "Verify CSS flexbox layout renders consistently",
-      "steps": ["Open website", "Check flexbox alignment", "Test responsive behavior"],
-      "expected_result": "Flexbox layout should be consistent across browsers",
-      "observed_result": "Works perfectly in Chrome, Firefox, and Safari",
+      "title": "CSS Grid Layout Test",
+      "test_case": "Verify CSS Grid renders consistently across browsers",
+      "steps": ["Load page", "Check grid alignment", "Test responsive breakpoints"],
+      "expected_result": "Grid layout displays consistently",
+      "observed_result": "Works well in Chrome/Firefox/Safari, minor issues in older browsers",
       "status": "pass",
-      "affected_browsers": [],
-      "affected_platforms": [],
+      "affected_browsers": ["chrome", "edge"],
+      "affected_platforms": ["windows", "mac"],
       "severity": "Low"
     }},
     {{
-      "id": "BC-002",
-      "title": "JavaScript ES6 Support",
-      "test_case": "Test modern JavaScript features",
-      "steps": ["Load page", "Check console for errors", "Test interactive features"],
-      "expected_result": "All JavaScript should work without errors",
-      "observed_result": "Works in modern browsers, issues in older IE versions",
-      "status": "warning",
-      "affected_browsers": ["Internet Explorer"],
-      "affected_platforms": ["Windows"],
+      "id": "BC-002", 
+      "title": "JavaScript ES6 Features",
+      "test_case": "Test modern JS features support",
+      "steps": ["Load page", "Check console", "Test interactive elements"],
+      "expected_result": "All JS features work without errors",
+      "observed_result": "Modern features work in current browsers",
+      "status": "pass",
+      "affected_browsers": ["chrome", "edge"],
+      "affected_platforms": ["windows", "mac"],
+      "severity": "Low"
+    }},
+    {{
+      "id": "BC-003",
+      "title": "Mobile Responsiveness",
+      "test_case": "Test responsive design on mobile devices", 
+      "steps": ["Open on mobile", "Check layout adaptation", "Test touch interactions"],
+      "expected_result": "Layout adapts properly to mobile screens",
+      "observed_result": "Responsive design works correctly on tested devices",
+      "status": "pass",
+      "affected_browsers": ["chrome", "edge"],
+      "affected_platforms": ["windows", "mac"],
       "severity": "Medium"
+    }},
+    {{
+      "id": "BC-004",
+      "title": "Form Input Compatibility",
+      "test_case": "Test form inputs across browsers",
+      "steps": ["Fill form fields", "Test validation", "Submit form"],
+      "expected_result": "Forms work consistently across browsers",
+      "observed_result": "Form behavior consistent in tested browsers",
+      "status": "pass",
+      "affected_browsers": ["chrome", "edge"],
+      "affected_platforms": ["windows", "mac"],
+      "severity": "Medium"
+    }},
+    {{
+      "id": "BC-005",
+      "title": "Page Load Performance",
+      "test_case": "Compare page load times across browsers",
+      "steps": ["Measure load times", "Check resource loading", "Test caching"],
+      "expected_result": "Consistent performance across browsers",
+      "observed_result": "Performance varies slightly between browsers but within acceptable range",
+      "status": "warning",
+      "affected_browsers": ["{normalized_browsers[0] if normalized_browsers else 'chrome'}"],
+      "affected_platforms": ["{normalized_platforms[0] if normalized_platforms else 'windows'}"],
+      "severity": "Low"
     }}
   ]
-}}
-
-Requirements:
-- Generate exactly 5-8 scenarios
-- Use realistic browser compatibility issues
-- Include mix of "pass", "fail", and "warning" statuses
-- Focus on: CSS compatibility, JavaScript support, HTML5 features, responsive design
-- Return only valid JSON, no additional text
-"""
+}}"""
         return prompt
 
     def test_browser_compatibility(self, url, browsers, platforms):
@@ -258,25 +376,40 @@ Requirements:
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are an expert browser compatibility testing engineer. Generate realistic browser compatibility test scenarios in valid JSON format."
+                        "content": """You are an expert browser compatibility testing engineer. 
+
+CRITICAL REQUIREMENTS:
+- Generate ONLY valid JSON - no markdown formatting, no code blocks, no explanations
+- Start your response immediately with { and end with }
+- Use proper JSON escaping for all strings
+- Keep all field values concise and under 100 characters
+- Ensure all required fields are present
+- Generate realistic but consistent test scenarios"""
                     },
                     {
                         "role": "user", 
                         "content": prompt
                     }
                 ],
-                temperature=0.3,
-                max_tokens=4096
+                temperature=0.1,  # Reduced for more consistent output
+                max_tokens=2048,  # Reduced to prevent truncation
+                frequency_penalty=0.0,
+                presence_penalty=0.0
             )
             
             response_text = response.choices[0].message.content
-            print(f"Browser compatibility response: {response_text[:500] if response_text else 'No content'}...")
+            print(f"Browser compatibility response length: {len(response_text) if response_text else 0}")
+            print(f"Browser compatibility response: {response_text if response_text else 'No content'}")
             
             if not response_text:
                 print("Empty response from browser compatibility API")
                 return self.create_default_browser_scenarios(browsers, platforms)
             
-            json_data = self.extract_json_from_response(response_text)
+            # Check if response looks like it was truncated
+            if not response_text.strip().endswith('}'):
+                print("WARNING: Response appears to be truncated")
+            
+            json_data = self.extract_browser_compatibility_json(response_text)
             
             if json_data and 'browser_compatibility_scenarios' in json_data:
                 scenarios = json_data['browser_compatibility_scenarios']
@@ -284,6 +417,7 @@ Requirements:
                 return scenarios
             else:
                 print("Failed to parse browser compatibility JSON, using default scenarios")
+                print(f"Raw response was: {response_text[:1000] if response_text else 'Empty'}")
                 return self.create_default_browser_scenarios(browsers, platforms)
                 
         except Exception as e:
@@ -378,19 +512,28 @@ Requirements:
                 messages=[
                     {
                         "role": "system",
-                        "content": "You are an expert software testing engineer with 15+ years of experience. Generate comprehensive test reports in valid JSON format."
+                        "content": """You are an expert browser compatibility testing engineer. Generate realistic browser compatibility test scenarios in valid JSON format.
+                        
+                        CRITICAL CONSISTENCY REQUIREMENTS:
+                        - Always generate the same scenarios for identical browser/platform combinations
+                        - Use deterministic logic for compatibility issue assessment
+                        - Process browsers in alphabetical order
+                        - Maintain consistent scenario numbering (BC-001, BC-002, etc.)
+                        - Use standardized status determination logic"""
                     },
                     {
                         "role": "user", 
                         "content": prompt
                     }
                 ],
-                temperature=0.5,
-                max_tokens=8192
+                temperature=0.0,
+                max_tokens=10000,
+                frequency_penalty=0.0,
+                presence_penalty=0.0
             )
             
             response_text = response.choices[0].message.content
-            print(f"Raw response from Perplexity: {response_text[:500] if response_text else 'No content'}...")
+            print(f"Raw response from Perplexity: {response_text if response_text else 'No content'}...")
             
             if not response_text:
                 print("Empty response from Perplexity API")
@@ -432,13 +575,21 @@ Requirements:
             else:
                 print("Failed to parse JSON, returning fallback report.")
                 fallback_report = self.create_fallback_report(url, response_text, test_categories)
+                
+                # Even fallback reports should include browser compatibility testing
+                print("Running browser compatibility tests for fallback report...")
+                browser_scenarios = self.test_browser_compatibility(url, browsers, platforms)
+                fallback_report['browser_compatibility_scenarios'] = browser_scenarios
+                
+                # Calculate browser compatibility score
+                browser_score = self.calculate_browser_compatibility_score(browser_scenarios)
+                
                 # Calculate category scores for fallback report
                 fallback_report['category_scores'] = self.calculate_category_scores(fallback_report, test_categories)
-                # Add default browser compatibility score
-                fallback_report['category_scores']['browser_compatibility'] = {
-                    "score": 50, "status": "Needs Work", "description": "Unable to test due to parsing error"
-                }
-                fallback_report['browser_compatibility_scenarios'] = []
+                
+                # Add browser compatibility score to category scores
+                fallback_report['category_scores']['browser_compatibility'] = browser_score
+                
                 # Even fallback reports should have calculated confidence
                 fallback_report['confidence_score'] = self.calculate_dynamic_confidence_score(fallback_report)
                 return fallback_report
@@ -452,16 +603,23 @@ Requirements:
         strategies = [
             lambda text: self.parse_json_from_code_blocks(text),
             lambda text: self.parse_first_json_object(text),
-            lambda text: self.parse_cleaned_response(text)
+            lambda text: self.parse_cleaned_response(text),
+            lambda text: self.parse_with_error_recovery(text)
         ]
         
-        for strategy in strategies:
+        for strategy_index, strategy in enumerate(strategies):
             try:
                 result = strategy(response_text)
                 if result and 'scenarios' in result: # Basic validation
+                    print(f"Successfully parsed JSON using strategy {strategy_index + 1}")
                     return result
+            except json.JSONDecodeError as e:
+                print(f"JSON parsing strategy {strategy_index + 1} failed: {str(e)}")
+                # Show the problematic part of the JSON
+                self.log_json_parse_error(response_text, e, strategy_index + 1)
+                continue
             except Exception as e:
-                print(f"JSON parsing strategy failed: {str(e)}")
+                print(f"JSON parsing strategy {strategy_index + 1} failed with error: {str(e)}")
                 continue
         
         return None
@@ -520,6 +678,303 @@ Requirements:
             json_text = cleaned[start:end]
             json_text = self.fix_common_json_issues(json_text)
             return json.loads(json_text)
+        
+        return None
+
+    def extract_browser_compatibility_json(self, response_text):
+        """Extract and parse JSON specifically for browser compatibility responses with truncation handling"""
+        if not response_text:
+            return None
+            
+        print(f"Raw browser compatibility response: {response_text}")
+        
+        # Multiple strategies for parsing browser compatibility JSON - prioritize truncation handling
+        strategies = [
+            lambda text: self.extract_complete_browser_arrays_from_truncated_json(text),
+            lambda text: self.parse_browser_json_from_code_blocks(text),
+            lambda text: self.parse_browser_first_json_object(text),
+            lambda text: self.parse_browser_cleaned_response(text),
+            lambda text: self.parse_incomplete_browser_json(text),
+            lambda text: self.parse_browser_with_error_recovery(text)
+        ]
+        
+        for strategy_index, strategy in enumerate(strategies):
+            try:
+                print(f" Browser compatibility JSON parsing strategy {strategy_index + 1}")
+                result = strategy(response_text)
+                if result and 'browser_compatibility_scenarios' in result:
+                    print(f" Successfully parsed browser compatibility JSON using strategy {strategy_index + 1}")
+                    return result
+            except json.JSONDecodeError as e:
+                print(f" Browser JSON parsing strategy {strategy_index + 1} failed: {str(e)}")
+                self.log_json_parse_error(response_text, e, strategy_index + 1)
+                continue
+            except Exception as e:
+                print(f" Browser JSON parsing strategy {strategy_index + 1} failed with error: {str(e)}")
+                continue
+        
+        print(" All browser compatibility JSON parsing strategies failed, creating fallback scenarios")
+        return None
+
+    def parse_browser_json_from_code_blocks(self, text):
+        """Extract browser compatibility JSON from markdown code blocks"""
+        import re
+        json_pattern = r'```(?:json)?\s*(\{.*?\})\s*```'
+        matches = re.findall(json_pattern, text, re.DOTALL)
+        
+        if not matches:
+            return None
+        
+        # Try to parse the largest match first
+        matches.sort(key=len, reverse=True)
+        for match in matches:
+            try:
+                parsed = json.loads(match)
+                if 'browser_compatibility_scenarios' in parsed:
+                    return parsed
+            except json.JSONDecodeError as e:
+                print(f"JSON decode error in code block: {str(e)}")
+                continue
+        return None
+
+    def parse_browser_first_json_object(self, text):
+        """Find and parse the first complete JSON object for browser compatibility"""
+        json_start = text.find('{')
+        if json_start == -1:
+            return None
+            
+        brace_count = 0
+        json_end = -1
+        in_string = False
+        escape_next = False
+        
+        # More robust brace matching that handles strings properly
+        for i, char in enumerate(text[json_start:]):
+            if escape_next:
+                escape_next = False
+                continue
+            
+            if char == '\\':
+                escape_next = True
+                continue
+                
+            if char == '"' and not escape_next:
+                in_string = not in_string
+                continue
+                
+            if not in_string:
+                if char == '{':
+                    brace_count += 1
+                elif char == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        json_end = json_start + i + 1
+                        break
+        
+        if json_end != -1:
+            json_text = text[json_start:json_end]
+            json_text = self.fix_common_json_issues(json_text)
+            try:
+                parsed = json.loads(json_text)
+                if 'browser_compatibility_scenarios' in parsed:
+                    return parsed
+            except json.JSONDecodeError as e:
+                print(f"JSON decode error in first object: {str(e)}")
+        
+        return None
+
+    def parse_browser_cleaned_response(self, text):
+        """Clean the browser compatibility response and try to parse as JSON"""
+        cleaned = text.strip()
+        
+        # Remove any leading/trailing markdown or text
+        start = cleaned.find('{')
+        end = cleaned.rfind('}') + 1
+        
+        if start != -1 and end > start:
+            json_text = cleaned[start:end]
+            json_text = self.fix_common_json_issues(json_text)
+            try:
+                parsed = json.loads(json_text)
+                if 'browser_compatibility_scenarios' in parsed:
+                    return parsed
+            except json.JSONDecodeError as e:
+                print(f"JSON decode error in cleaned response: {str(e)}")
+        
+        return None
+
+    def parse_incomplete_browser_json(self, text):
+        """Try to parse incomplete/truncated browser compatibility JSON"""
+        try:
+            # Look for the start of browser_compatibility_scenarios
+            start_marker = '"browser_compatibility_scenarios"'
+            if start_marker not in text:
+                return None
+            
+            # Find the opening brace
+            json_start = text.find('{')
+            if json_start == -1:
+                return None
+            
+            # Try to fix common incomplete JSON issues
+            json_text = text[json_start:]
+            
+            # If JSON ends abruptly, try to close it properly
+            if not json_text.rstrip().endswith('}'):
+                # Count open braces and brackets to determine what needs closing
+                open_braces = json_text.count('{') - json_text.count('}')
+                open_brackets = json_text.count('[') - json_text.count(']')
+                
+                # Add closing characters
+                for _ in range(open_brackets):
+                    json_text += ']'
+                for _ in range(open_braces):
+                    json_text += '}'
+            
+            # Fix trailing commas and other issues
+            json_text = self.fix_common_json_issues(json_text)
+            
+            parsed = json.loads(json_text)
+            if 'browser_compatibility_scenarios' in parsed:
+                return parsed
+                
+        except Exception as e:
+            print(f"Failed to parse incomplete JSON: {str(e)}")
+        
+        return None
+
+    def parse_browser_with_error_recovery(self, text):
+        """Attempt to parse browser compatibility JSON with aggressive error recovery"""
+        try:
+            # Start with basic cleanup
+            json_text = self.fix_common_json_issues(text)
+            
+            # Try to find the main JSON object
+            json_start = json_text.find('{')
+            if json_start == -1:
+                return None
+            
+            json_text = json_text[json_start:]
+            
+            # First attempt - parse as is
+            try:
+                parsed = json.loads(json_text)
+                if 'browser_compatibility_scenarios' in parsed:
+                    return parsed
+            except json.JSONDecodeError:
+                pass
+            
+            # Second attempt - try to fix incomplete JSON
+            if not json_text.rstrip().endswith('}'):
+                open_braces = json_text.count('{') - json_text.count('}')
+                open_brackets = json_text.count('[') - json_text.count(']')
+                
+                for _ in range(open_brackets):
+                    json_text += ']'
+                for _ in range(open_braces):
+                    json_text += '}'
+                
+                try:
+                    parsed = json.loads(json_text)
+                    if 'browser_compatibility_scenarios' in parsed:
+                        return parsed
+                except json.JSONDecodeError:
+                    pass
+            
+            # Third attempt - try to extract partial browser compatibility data
+            return self.extract_partial_browser_data(json_text)
+            
+        except Exception as e:
+            print(f"Error in parse_browser_with_error_recovery: {str(e)}")
+            return None
+
+    def extract_complete_browser_arrays_from_truncated_json(self, json_text):
+        """
+        Extract complete browser_compatibility_scenarios array from truncated JSON
+        This method specifically handles cases where browser compatibility JSON is cut off
+        """
+        try:
+            print("🔧 Attempting to extract complete browser compatibility arrays from truncated JSON...")
+            
+            # First, try to parse the full JSON if it's complete
+            try:
+                parsed = json.loads(json_text)
+                if 'browser_compatibility_scenarios' in parsed:
+                    print(f" Successfully extracted {len(parsed['browser_compatibility_scenarios'])} complete browser scenarios from valid JSON")
+                    return parsed
+            except json.JSONDecodeError:
+                pass  # Continue with truncation handling
+            
+            # Find the browser_compatibility_scenarios array - be more flexible with the pattern
+            scenarios_pattern = r'"browser_compatibility_scenarios"\s*:\s*\[(.*?)\]'
+            scenarios_match = re.search(scenarios_pattern, json_text, re.DOTALL)
+            
+            browser_scenarios = []
+            
+            if scenarios_match:
+                try:
+                    # First try to parse the extracted array directly
+                    scenarios_json = f'[{scenarios_match.group(1)}]'
+                    browser_scenarios = json.loads(scenarios_json)
+                    print(f" Successfully extracted {len(browser_scenarios)} complete browser scenarios")
+                except Exception as e:
+                    print(f" Failed to parse browser scenarios as complete array: {e}")
+                    # Try to extract individual scenario objects even if JSON is malformed
+                    scenarios_text = scenarios_match.group(1)
+                    # Look for complete scenario objects with proper nesting
+                    scenario_pattern = r'\{(?:[^{}]|{[^{}]*})*\}'
+                    scenario_matches = re.findall(scenario_pattern, scenarios_text)
+                    
+                    for scenario_text in scenario_matches:
+                        try:
+                            scenario = json.loads(scenario_text)
+                            if 'id' in scenario:  # Basic validation
+                                browser_scenarios.append(scenario)
+                        except Exception as parse_error:
+                            print(f" Failed to parse individual scenario: {parse_error}")
+                            continue
+                    
+                    print(f" Extracted {len(browser_scenarios)} partial browser scenarios")
+            
+            # If we got scenarios, create a valid browser compatibility report
+            if browser_scenarios:
+                report_data = {
+                    "browser_compatibility_scenarios": browser_scenarios
+                }
+                
+                print(f" Created complete browser compatibility report with {len(browser_scenarios)} scenarios")
+                return report_data
+            
+        except Exception as e:
+            print(f" Error in truncated browser compatibility JSON extraction: {e}")
+        
+        return None
+
+    def extract_partial_browser_data(self, json_text):
+        """Extract whatever valid browser compatibility data we can from malformed JSON"""
+        try:
+            partial_data = {"browser_compatibility_scenarios": []}
+            
+            # Try to extract browser_compatibility_scenarios array
+            scenarios_match = re.search(r'"browser_compatibility_scenarios"\s*:\s*\[(.*?)\]', json_text, re.DOTALL)
+            if scenarios_match:
+                scenarios_text = scenarios_match.group(1)
+                # Try to extract individual scenario objects
+                scenario_objects = re.findall(r'\{[^{}]*"id"[^{}]*\}', scenarios_text, re.DOTALL)
+                
+                for scenario_text in scenario_objects:
+                    try:
+                        scenario = json.loads(scenario_text)
+                        partial_data["browser_compatibility_scenarios"].append(scenario)
+                    except:
+                        continue
+            
+            # Only return if we found some data
+            if partial_data["browser_compatibility_scenarios"]:
+                return partial_data
+                
+        except Exception as e:
+            print(f"Error extracting partial browser compatibility data: {str(e)}")
         
         return None
 
@@ -689,14 +1144,301 @@ Requirements:
             return 50  # Default middle value if calculation fails
 
     def fix_common_json_issues(self, json_text):
-        """Fix common JSON formatting issues like trailing commas"""
+        """Fix common JSON formatting issues like trailing commas, missing commas, etc."""
         import re
-        # Remove trailing commas before closing braces/brackets
-        json_text = re.sub(r',\s*([}\]])', r'\1', json_text)
+        
+        try:
+            # Remove trailing commas before closing braces/brackets
+            json_text = re.sub(r',\s*([}\]])', r'\1', json_text)
+            
+            # Fix missing commas between objects (common issue)
+            json_text = re.sub(r'}\s*{', r'},{', json_text)
+            json_text = re.sub(r']\s*\[', r'],[', json_text)
+            json_text = re.sub(r'"\s*"', r'","', json_text)
+            
+            # Fix missing commas after strings before objects/arrays
+            json_text = re.sub(r'"\s*([{\[])', r'",\1', json_text)
+            
+            # Fix missing commas after objects/arrays before strings
+            json_text = re.sub(r'([}\]])\s*"', r'\1,"', json_text)
+            
+            # Fix incomplete string values that might cause issues
+            json_text = re.sub(r':\s*"[^"]*$', r': "incomplete_value"', json_text)
+            
+            # Remove any non-printable characters
+            json_text = re.sub(r'[^\x20-\x7E\n\r\t]', '', json_text)
+            
+        except Exception as e:
+            print(f"Error in fix_common_json_issues: {str(e)}")
+        
         return json_text
+
+    def log_json_parse_error(self, response_text, error, strategy_num):
+        """Log detailed information about JSON parsing errors and show what data was found"""
+        try:
+            # Extract error position information
+            error_msg = str(error)
+            
+            # Try to find line and column information
+            line_match = re.search(r'line (\d+)', error_msg)
+            col_match = re.search(r'column (\d+)', error_msg)
+            char_match = re.search(r'char (\d+)', error_msg)
+            
+            print(f"\n=== JSON Parse Error Details (Strategy {strategy_num}) ===")
+            print(f"Error: {error_msg}")
+            
+            if char_match:
+                char_pos = int(char_match.group(1))
+                print(f"Error position: character {char_pos}")
+                
+                # Show context around the error
+                start = max(0, char_pos - 100)
+                end = min(len(response_text), char_pos + 100)
+                context = response_text[start:end]
+                print(f"Context around error:\n{context}")
+                
+                # Show exactly where the error is
+                error_char = response_text[char_pos] if char_pos < len(response_text) else "EOF"
+                print(f"Problem character: '{error_char}'")
+            
+            # Show first 500 chars of response
+            print(f"Response start: {response_text[:500]}...")
+            
+            # Check what data we can find
+            scenarios_match = re.search(r'"scenarios":\s*\[', response_text)
+            defects_match = re.search(r'"defects_and_gaps":\s*\[', response_text) 
+            non_func_match = re.search(r'"non_functional_observations"', response_text)
+            
+            if scenarios_match:
+                print("✓ Found 'scenarios' array start")
+            if defects_match:
+                print("✓ Found 'defects_and_gaps' array start")
+            if non_func_match:
+                print("✓ Found 'non_functional_observations' start")
+            
+            # Count scenarios found
+            scenario_count = len(re.findall(r'"id":\s*"SCENARIO-\d+', response_text))
+            defect_count = len(re.findall(r'"id":\s*"BUG-\d+', response_text))
+            
+            print(f"📊 Data found: {scenario_count} scenarios, {defect_count} defects")
+            print("=" * 50)
+            
+        except Exception as e:
+            print(f"Error logging JSON parse error: {str(e)}")
+
+    def parse_with_error_recovery(self, text):
+        """Parse JSON with multiple recovery strategies focused on extracting complete arrays"""
+        try:
+            # Strategy 1: Try to extract complete arrays from truncated JSON first
+            print(" JSON parsing strategy 1: Extract complete arrays from truncated JSON")
+            complete_arrays = self.extract_complete_arrays_from_truncated_json(text)
+            if complete_arrays and complete_arrays.get('scenarios') and complete_arrays.get('defects_and_gaps'):
+                print(" Strategy 1 successful: Complete arrays extracted!")
+                return complete_arrays
+            
+            # Strategy 2: Standard JSON parsing after cleanup
+            print(" JSON parsing strategy 2: Standard parsing with cleanup")
+            json_text = self.fix_common_json_issues(text)
+            
+            # Try to find the main JSON object
+            json_start = json_text.find('{')
+            if json_start == -1:
+                print(" No JSON object found")
+                # Fall back to partial extraction
+                return self.extract_partial_json_data(text)
+            
+            json_text = json_text[json_start:]
+            
+            try:
+                result = json.loads(json_text)
+                print(" Strategy 2 successful: Standard JSON parsing worked!")
+                return result
+            except json.JSONDecodeError as e:
+                print(f" Strategy 2 failed: {e}")
+            
+            # Strategy 3: Try to fix incomplete JSON by closing structures
+            print(" JSON parsing strategy 3: Fix incomplete JSON structures")
+            if not json_text.rstrip().endswith('}'):
+                # Count braces and brackets to close properly
+                open_braces = json_text.count('{') - json_text.count('}')
+                open_brackets = json_text.count('[') - json_text.count(']')
+                
+                # Close open structures
+                for _ in range(open_brackets):
+                    json_text += ']'
+                for _ in range(open_braces):
+                    json_text += '}'
+                
+                try:
+                    result = json.loads(json_text)
+                    print(" Strategy 3 successful: Fixed incomplete JSON!")
+                    return result
+                except json.JSONDecodeError as e:
+                    print(f" Strategy 3 failed: {e}")
+            
+            # Strategy 4: Extract partial data using regex
+            print(" JSON parsing strategy 4: Extract partial data")
+            partial_result = self.extract_partial_json_data(text)
+            if partial_result:
+                print(" Strategy 4 successful: Partial data extracted!")
+                return partial_result
+            
+            print(" All JSON parsing strategies failed")
+            return None
+            
+        except Exception as e:
+            print(f" Error in parse_with_error_recovery: {str(e)}")
+            return None
+
+    def extract_complete_arrays_from_truncated_json(self, json_text):
+        """
+        Extract complete scenarios and defects_and_gaps arrays from truncated JSON
+        This method specifically handles cases where JSON is cut off in non_functional_observations
+        """
+        try:
+            print("🔧 Attempting to extract complete arrays from truncated JSON...")
+            
+            # Find the scenarios array - be more flexible with the pattern
+            scenarios_pattern = r'"scenarios":\s*\[(.*?)\]'
+            scenarios_match = re.search(scenarios_pattern, json_text, re.DOTALL)
+            
+            scenarios = []
+            defects = []
+            
+            if scenarios_match:
+                try:
+                    scenarios_json = f'[{scenarios_match.group(1)}]'
+                    scenarios = json.loads(scenarios_json)
+                    print(f"✅ Successfully extracted {len(scenarios)} complete scenarios")
+                except Exception as e:
+                    print(f"⚠️ Failed to parse scenarios: {e}")
+            else:
+                print("⚠️ No scenarios array found in JSON")
+            
+            # Find the defects_and_gaps array - be more flexible with the pattern
+            defects_pattern = r'"defects_and_gaps":\s*\[(.*?)\]'
+            defects_match = re.search(defects_pattern, json_text, re.DOTALL)
+            
+            if defects_match:
+                try:
+                    defects_json = f'[{defects_match.group(1)}]'
+                    defects = json.loads(defects_json)
+                    print(f"✅ Successfully extracted {len(defects)} complete defects")
+                except Exception as e:
+                    print(f"⚠️ Failed to parse defects: {e}")
+                    # Try to extract partial defects even if JSON is malformed
+                    defects_text = defects_match.group(1)
+                    # Look for complete defect objects
+                    defect_pattern = r'\{(?:[^{}]|{[^{}]*})*\}'
+                    defect_matches = re.findall(defect_pattern, defects_text)
+                    
+                    for defect_text in defect_matches:
+                        try:
+                            defect = json.loads(defect_text)
+                            if 'id' in defect:  # Basic validation
+                                defects.append(defect)
+                        except Exception as parse_error:
+                            print(f"⚠️ Failed to parse individual defect: {parse_error}")
+                            continue
+                    
+                    print(f"⚠️ Extracted {len(defects)} partial defects")
+            else:
+                print("⚠️ No defects_and_gaps array found in JSON")
+            
+            # If we got scenarios or defects (not necessarily both), create a valid report
+            if scenarios or defects:
+                # Extract other basic fields
+                url_match = re.search(r'"url":\s*"([^"]+)"', json_text)
+                url = url_match.group(1) if url_match else "unknown"
+                
+                timestamp_match = re.search(r'"timestamp":\s*"([^"]+)"', json_text)
+                timestamp = timestamp_match.group(1) if timestamp_match else datetime.now().isoformat()
+                
+                categories_match = re.search(r'"test_categories":\s*\[(.*?)\]', json_text)
+                test_categories = []
+                if categories_match:
+                    try:
+                        categories_json = f'[{categories_match.group(1)}]'
+                        test_categories = json.loads(categories_json)
+                    except:
+                        test_categories = ["Accessibility", "Functionality", "Performance", "Security", "Usability"]
+                
+                report_data = {
+                    "url": url,
+                    "timestamp": timestamp,
+                    "test_categories": test_categories,
+                    "scenarios": scenarios,  # Will be [] if not found
+                    "defects_and_gaps": defects,  # Will be [] if not found
+                    "non_functional_observations": {
+                        "performance": ["Non-functional observations were truncated in the response"],
+                        "security": ["Non-functional observations were truncated in the response"],
+                        "accessibility": ["Non-functional observations were truncated in the response"], 
+                        "usability": ["Non-functional observations were truncated in the response"]
+                    },
+                    "recommendations": [
+                        "Recommendations were truncated in the response - please retry the analysis"  
+                    ],
+                    "overall_assessment": {
+                        "note": f"Assessment was truncated, but extracted {len(scenarios)} scenarios and {len(defects)} defects"
+                    }
+                }
+                
+                print(f"✅ Created report with {len(scenarios)} scenarios and {len(defects)} defects from truncated JSON")
+                return report_data
+            
+        except Exception as e:
+            print(f" Error in truncated JSON extraction: {e}")
+        
+        return None
+
+    def extract_partial_json_data(self, json_text):
+        """Extract whatever valid data we can from malformed JSON"""
+        try:
+            partial_data = {"scenarios": [], "defects_and_gaps": []}
+            
+            # Try to extract scenarios array
+            scenarios_match = re.search(r'"scenarios"\s*:\s*\[(.*?)\]', json_text, re.DOTALL)
+            if scenarios_match:
+                scenarios_text = scenarios_match.group(1)
+                # Try to extract individual scenario objects
+                scenario_objects = re.findall(r'\{[^{}]*"id"[^{}]*\}', scenarios_text, re.DOTALL)
+                
+                for scenario_text in scenario_objects:
+                    try:
+                        scenario = json.loads(scenario_text)
+                        partial_data["scenarios"].append(scenario)
+                    except:
+                        continue
+            
+            # Try to extract defects array
+            defects_match = re.search(r'"defects_and_gaps"\s*:\s*\[(.*?)\]', json_text, re.DOTALL)
+            if defects_match:
+                defects_text = defects_match.group(1)
+                defect_objects = re.findall(r'\{[^{}]*"id"[^{}]*\}', defects_text, re.DOTALL)
+                
+                for defect_text in defect_objects:
+                    try:
+                        defect = json.loads(defect_text)
+                        partial_data["defects_and_gaps"].append(defect)
+                    except:
+                        continue
+            
+            # Only return if we found some data
+            if partial_data["scenarios"] or partial_data["defects_and_gaps"]:
+                return partial_data
+                
+        except Exception as e:
+            print(f"Error extracting partial JSON data: {str(e)}")
+        
+        return None
 
     def create_fallback_report(self, url, analysis_text, test_categories=None):
         """Create fallback report when JSON parsing fails"""
+        print(f"Creating fallback report due to JSON parsing failure")
+        
+        # Try to extract any valid data we can from the raw response
+        partial_data = self.extract_any_valid_data(analysis_text)
+        
         # Create fallback category scores for selected categories
         fallback_category_scores = {}
         if test_categories:
@@ -718,21 +1460,43 @@ Requirements:
                     "description": "Unable to test due to parsing error"
                 }
         
+        # Include any partial data we managed to extract
+        scenarios = partial_data.get('scenarios', [])
+        defects = partial_data.get('defects_and_gaps', [])
+        
+        # Add a parsing error defect
+        parse_error_defect = {
+            "id": "PARSE-001",
+            "title": "JSON Generation Failed",
+            "description": f"The AI model did not return a valid JSON object. Found {len(scenarios)} valid scenarios and {len(defects)} valid defects before parsing failed.",
+            "severity": "High",
+            "feature": "AI Response Processing"
+        }
+        defects.append(parse_error_defect)
+        
+        # Create functional observations with extracted text information
+        functional_observations = [
+            "Fallback report generated due to JSON parsing failure.",
+            f"Successfully extracted {len(scenarios)} test scenarios from response.",
+            f"Successfully extracted {len(defects)-1} defect reports from response."
+        ]
+        
+        # Try to extract readable content from the response
+        readable_content = self.extract_readable_content(analysis_text)
+        if readable_content:
+            functional_observations.extend(readable_content[:3])  # Add first 3 observations
+        
         report = {
-            "scenarios": [],
+            "scenarios": scenarios,
             "browser_compatibility_scenarios": [],
-            "functional_observations": [
-                "Fallback report generated due to JSON parsing failure.",
-                "Raw AI Response (truncated): " + analysis_text[:1000]
-            ],
-            "non_functional_observations": {},
-            "defects_and_gaps": [{
-                "id": "PARSE-001",
-                "title": "JSON Generation Failed",
-                "description": "The AI model did not return a valid JSON object. This could be due to a content policy violation or a model formatting error. Check the raw response above.",
-                "severity": "High",
-                "feature": "AI Response Processing"
-            }],
+            "functional_observations": functional_observations,
+            "non_functional_observations": {
+                "performance": ["Unable to analyze due to parsing error"],
+                "security": ["Unable to analyze due to parsing error"],
+                "accessibility": ["Unable to analyze due to parsing error"],
+                "usability": ["Unable to analyze due to parsing error"]
+            },
+            "defects_and_gaps": defects,
             "category_scores": fallback_category_scores,
             "performance": {
                 "page_load_time": "2.5s",
@@ -746,12 +1510,78 @@ Requirements:
             "recommendations": [
                 "Try the request again with a different URL format",
                 "If the problem persists, the target website may have content that triggers AI safety filters",
-                "Consider testing a simpler website first"
+                "Consider testing a simpler website first",
+                f"Partial data was recovered: {len(scenarios)} scenarios, {len(defects)-1} defects"
             ]
         }
-        # Calculate confidence based on the failure
-        report['confidence_score'] = self.calculate_dynamic_confidence_score(report)
+        
+        # Calculate confidence based on recovered data
+        if scenarios:
+            # If we have scenarios, calculate confidence based on them
+            report['confidence_score'] = self.calculate_dynamic_confidence_score(report)
+        else:
+            # No scenarios recovered, low confidence
+            report['confidence_score'] = 25
+        
         return report
+
+    def extract_any_valid_data(self, text):
+        """Extract any valid JSON objects, scenarios, or defects from malformed response"""
+        extracted_data = {"scenarios": [], "defects_and_gaps": []}
+        
+        try:
+            # Try to find individual scenario objects
+            scenario_pattern = r'\{\s*"id"\s*:\s*"SCENARIO-[^"]*"[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
+            scenario_matches = re.findall(scenario_pattern, text, re.DOTALL | re.IGNORECASE)
+            
+            for match in scenario_matches:
+                try:
+                    scenario = json.loads(match)
+                    extracted_data["scenarios"].append(scenario)
+                except:
+                    continue
+            
+            # Try to find individual defect objects
+            defect_pattern = r'\{\s*"id"\s*:\s*"BUG-[^"]*"[^{}]*(?:\{[^{}]*\}[^{}]*)*\}'
+            defect_matches = re.findall(defect_pattern, text, re.DOTALL | re.IGNORECASE)
+            
+            for match in defect_matches:
+                try:
+                    defect = json.loads(match)
+                    extracted_data["defects_and_gaps"].append(defect)
+                except:
+                    continue
+            
+            print(f"Extracted {len(extracted_data['scenarios'])} scenarios and {len(extracted_data['defects_and_gaps'])} defects from malformed response")
+            
+        except Exception as e:
+            print(f"Error extracting data: {str(e)}")
+        
+        return extracted_data
+
+    def extract_readable_content(self, text):
+        """Extract readable observations and recommendations from text"""
+        observations = []
+        
+        try:
+            # Look for common testing observations in the text
+            observation_keywords = [
+                "page load", "navigation", "responsive", "performance", 
+                "accessibility", "security", "usability", "browser", "mobile"
+            ]
+            
+            sentences = re.split(r'[.!?]+', text)
+            for sentence in sentences[:50]:  # Check first 50 sentences
+                sentence = sentence.strip()
+                if len(sentence) > 20 and any(keyword in sentence.lower() for keyword in observation_keywords):
+                    observations.append(sentence[:200])  # Limit length
+                    if len(observations) >= 5:  # Limit number of observations
+                        break
+        
+        except Exception as e:
+            print(f"Error extracting readable content: {str(e)}")
+        
+        return observations
 
     def create_error_report(self, url, error_message, test_categories=None):
         """Create error report when API call fails"""
@@ -790,7 +1620,12 @@ Requirements:
             "scenarios": [],
             "browser_compatibility_scenarios": [],
             "functional_observations": [f"A critical error occurred during analysis: {error_message}"],
-            "non_functional_observations": {},
+            "non_functional_observations": {
+                "performance": [f"Unable to analyze due to error: {error_message}"],
+                "security": [f"Unable to analyze due to error: {error_message}"],
+                "accessibility": [f"Unable to analyze due to error: {error_message}"],
+                "usability": [f"Unable to analyze due to error: {error_message}"]
+            },
             "defects_and_gaps": [{
                 "id": "ERROR-001",
                 "title": "Analysis Process Error",
@@ -940,7 +1775,51 @@ def get_test_history():
     return jsonify(history)
 
 if __name__ == '__main__':
-    
-    
-    
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # Test the browser compatibility parsing if running directly
+    if len(sys.argv) > 1 and sys.argv[1] == 'test':
+        print("Testing browser compatibility JSON parsing...")
+        engine = TestingEngine()
+        
+        # Test with sample truncated JSON (like the one in the error)
+        sample_response = '''```json
+{
+  "browser_compatibility_scenarios": [
+    {
+      "id": "BC-001",
+      "title": "CSS Flexbox Layout Consistency",
+      "test_case": "Verify that flexbox-based layouts render and align content consistently.",  
+      "steps": [
+        "Open https://academybugs.com/my-bookings/ in Chrome and Edge on both Mac and Windows.",
+        "Inspect main content and booking list alignment.",
+        "Resize browser window to test responsiveness."
+      ],
+      "expected_result": "Flexbox layout should be consistent across all browsers and platforms",
+      "observed_result": "Layout works well in modern browsers",
+      "status": "pass",
+      "affected_browsers": [],
+      "affected_platforms": [],
+      "severity": "Low"
+    }
+  ]
+}
+```'''
+        
+        result = engine.extract_browser_compatibility_json(sample_response)
+        if result:
+            print(f" Successfully parsed JSON with {len(result['browser_compatibility_scenarios'])} scenarios")
+        else:
+            print(" Failed to parse JSON")
+        
+        # Test with actual API call
+        print("\nTesting actual API call...")
+        try:
+            scenarios = engine.test_browser_compatibility(
+                "https://example.com", 
+                ["Chrome", "Firefox"], 
+                ["Windows", "macOS"]
+            )
+            print(f" API test successful, got {len(scenarios)} scenarios")
+        except Exception as e:
+            print(f" API test failed: {str(e)}")
+    else:
+        app.run(debug=True, host='0.0.0.0', port=5000)

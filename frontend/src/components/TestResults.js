@@ -169,6 +169,14 @@ const TestResults = () => {
     }
   };
 
+  // Helper function to check if any scenario has meaningful observed results
+  const hasObservedResults = (scenarios) => {
+    return scenarios && scenarios.some(scenario => {
+      const observed = scenario.observed_result || scenario.observed || '';
+      return observed && observed.trim() !== '' && observed.trim().toLowerCase() !== 'n/a';
+    });
+  };
+
   const deriveStatus = (scenario) => {
     // If status is already provided, use it
     if (scenario.status) {
@@ -180,7 +188,7 @@ const TestResults = () => {
     const observed = (scenario.observed_result || scenario.observed || '').toLowerCase().trim();
     
     if (!expected || !observed) {
-      return 'unknown';
+      return 'warning';
     }
     
     // Simple comparison - you can make this more sophisticated
@@ -1033,7 +1041,7 @@ const TestResults = () => {
                           <MenuItem value="pass">Pass</MenuItem>
                           <MenuItem value="fail">Fail</MenuItem>
                           <MenuItem value="warning">Warning</MenuItem>
-                          <MenuItem value="unknown">Unknown</MenuItem>
+                          <MenuItem value="warning">Warning</MenuItem>
                         </Select>
                       </FormControl>
                     </Grid>
@@ -1065,7 +1073,7 @@ const TestResults = () => {
                         <TableCell><strong>Platform</strong></TableCell>
                         <TableCell><strong>Browser</strong></TableCell>
                         <TableCell><strong>Expected</strong></TableCell>
-                        <TableCell><strong>Observed</strong></TableCell>
+                        {hasObservedResults(report.scenarios) && <TableCell><strong>Observed</strong></TableCell>}
                         <TableCell><strong>Status</strong></TableCell>
                       </TableRow>
                     </TableHead>
@@ -1091,11 +1099,13 @@ const TestResults = () => {
                               {scenario.expected_result || scenario.expected || 'N/A'}
                             </Typography>
                           </TableCell>
-                          <TableCell>
-                            <Typography variant="body2" sx={{ maxWidth: 200, wordBreak: 'break-word' }}>
-                              {scenario.observed_result || scenario.observed || 'N/A'}
-                            </Typography>
-                          </TableCell>
+                          {hasObservedResults(report.scenarios) && (
+                            <TableCell>
+                              <Typography variant="body2" sx={{ maxWidth: 200, wordBreak: 'break-word' }}>
+                                {scenario.observed_result || scenario.observed || 'N/A'}
+                              </Typography>
+                            </TableCell>
+                          )}
                           <TableCell>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                               {getStatusIcon(deriveStatus(scenario))}
@@ -1235,7 +1245,7 @@ const TestResults = () => {
                         <TableCell><strong>Test ID</strong></TableCell>
                         <TableCell><strong>Test Case</strong></TableCell>
                         <TableCell><strong>Expected</strong></TableCell>
-                        <TableCell><strong>Observed</strong></TableCell>
+                        {hasObservedResults(report.browser_compatibility_scenarios) && <TableCell><strong>Observed</strong></TableCell>}
                         <TableCell><strong>Affected Browsers</strong></TableCell>
                         <TableCell><strong>Affected Platforms</strong></TableCell>
                         <TableCell><strong>Status</strong></TableCell>
@@ -1260,11 +1270,13 @@ const TestResults = () => {
                               {scenario.expected_result || scenario.expected || 'N/A'}
                             </Typography>
                           </TableCell>
-                          <TableCell>
-                            <Typography variant="body2" sx={{ maxWidth: 200, wordBreak: 'break-word' }}>
-                              {scenario.observed_result || scenario.observed || 'N/A'}
-                            </Typography>
-                          </TableCell>
+                          {hasObservedResults(report.browser_compatibility_scenarios) && (
+                            <TableCell>
+                              <Typography variant="body2" sx={{ maxWidth: 200, wordBreak: 'break-word' }}>
+                                {scenario.observed_result || scenario.observed || 'N/A'}
+                              </Typography>
+                            </TableCell>
+                          )}
                           <TableCell>
                             <Typography variant="body2" sx={{ maxWidth: 150, wordBreak: 'break-word' }}>
                               {Array.isArray(scenario.affected_browsers) ? 
@@ -1283,7 +1295,7 @@ const TestResults = () => {
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                               {getStatusIcon(scenario.status)}
                               <Chip 
-                                label={scenario.status || 'unknown'} 
+                                label={scenario.status || 'warning'} 
                                 size="small"
                                 color={getStatusColor(scenario.status)}
                                 variant="outlined"
@@ -1429,12 +1441,14 @@ const TestResults = () => {
                       {category}
                     </Typography>
                     <List dense>
-                      {observations?.map((obs, index) => (
+                      {Array.isArray(observations) ? observations.map((obs, index) => (
                         <ListItem key={index}>
                           <ListItemText primary={obs.description || obs} />
                         </ListItem>
-                      )) || (
-                        <Typography color="text.secondary">No observations</Typography>
+                      )) : (
+                        <ListItem>
+                          <ListItemText primary={observations || "No observations available"} />
+                        </ListItem>
                       )}
                     </List>
                   </Grid>
@@ -1454,15 +1468,20 @@ const TestResults = () => {
             </AccordionSummary>
             <AccordionDetails>
               <List>
-                {report.recommendations?.map((recommendation, index) => (
+                {Array.isArray(report.recommendations) ? report.recommendations.map((recommendation, index) => (
                   <ListItem key={index} divider>
                     <ListItemText 
                       primary={recommendation.title || recommendation}
                       secondary={recommendation.details || recommendation.description}
                     />
                   </ListItem>
-                )) || (
-                  <Typography color="text.secondary">No recommendations available</Typography>
+                )) : (
+                  <ListItem>
+                    <ListItemText 
+                      primary="No recommendations available"
+                      secondary="Please retry the analysis to get recommendations"
+                    />
+                  </ListItem>
                 )}
               </List>
             </AccordionDetails>
