@@ -1488,7 +1488,7 @@ const TestResults = () => {
           </Accordion>
         </Grid>
 
-        {/* Raw JSON Report */}
+        {/* Raw JSON Report
         <Grid item xs={12}>
           <Accordion>
             <AccordionSummary expandIcon={<ExpandMore />}>
@@ -1500,7 +1500,7 @@ const TestResults = () => {
               </Box>
             </AccordionDetails>
           </Accordion>
-        </Grid>
+        </Grid> */}
       </Grid>
     </Container>
   );
