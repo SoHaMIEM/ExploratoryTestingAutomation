@@ -528,7 +528,8 @@ CRITICAL REQUIREMENTS:
                 ],
                 temperature=0.0,
                 max_tokens=10000, # Increased to handle large responses and also limit max tokens remember if max tokens is 8k or less then the output result from the llm may be truncated before reaching the end of the json
-                frequency_penalty=0.0,
+                top_p=0.0,
+                frequency_penalty=0.0, #top_p=0.0 → safest for consistency. top_p=0.1 → almost consistent, but you’ll still see 5–20% variance in outputs. top_p = nucleus sampling parameter.It tells the model:“Only consider the smallest set of tokens whose cumulative probability mass is ≤ top_p.”
                 presence_penalty=0.0
             )
             
